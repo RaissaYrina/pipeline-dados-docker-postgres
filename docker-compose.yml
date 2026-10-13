@@ -1,0 +1,12 @@
+services:
+  db:
+    image: postgres:16             
+    env_file:
+      - .env                 # o arquivo com usuário/senha/banco
+    ports:
+      - "5432:5432"           # máquina:container
+    volumes:
+      - dolar_pgdata:/var/lib/postgresql/data       # nome_do_volume:caminho_dos_dados
+
+volumes:
+  dolar_pgdata:                  
