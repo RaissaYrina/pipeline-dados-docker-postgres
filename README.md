@@ -25,7 +25,18 @@ O pipeline foi pensado para falhar de forma controlada:
 - **Transação segura no banco:** se a carga falhar no meio, é feito `rollback`, então nenhum dado parcial fica no Postgres. A conexão é sempre encerrada (`finally`).
 - **Idempotência:** a coluna `data` é chave primária e o insert usa `ON CONFLICT DO NOTHING`. Rodar o pipeline 2x seguidas mantém o mesmo número de linhas (testado).
 - **Credenciais fora do código:** usuário e senha do banco vêm de variáveis de ambiente.
+- **Período sem dados:** quando a API responde 404 (ex.: fim de semana, sem cotação), o pipeline não tenta de novo e para com uma mensagem clara, sem abrir conexão com o banco.
 
+## 🧪 Testes de falha
+Cenários forçados para validar a robustez:
+
+| Cenário | Resultado esperado | ✅ |
+|---|---|---|
+| Lote com 1 linha válida + 1 inválida | Rollback: nenhuma linha gravada | ✅ |
+| Banco fora do ar (`docker compose stop`) | `OperationalError` claro; volta a funcionar após `start` | ✅ |
+| Pipeline executado 2x | Mesmo `COUNT` (idempotente) | ✅ |
+| Período só com fim de semana | API retorna 404 → para sem retry e sem tocar no banco | ✅ |
+| URL inválida | 3 tentativas com backoff e erro final | ✅ |
 
 ## 🗄️ Modelo de dados
 | Coluna | Tipo | Descrição |
@@ -81,11 +92,13 @@ docker compose exec db psql -U SEU_USUARIO -d SEU_BANCO -c "SELECT * FROM cotaca
 - `except` sem `raise` "engole" o erro: o pipeline parecia ter dado certo mesmo falhando
 - `finally` roda sempre, então é o lugar certo para fechar a conexão, e não para a mensagem de sucesso
 - Lendo a resposta de erro da API, descobri que o endpoint `ultimos/N` aceita no máximo 20 registros e passei a consultar por período
+- Rollback garante atomicidade: ou o lote inteiro entra, ou nada entra (comprovado com `SELECT` no banco)
+- A API do BC não devolve lista vazia para período sem dados, devolve 404. Só descobri testando
+- Retry só faz sentido em erros temporários (timeout, 5xx); num 404 é tempo perdido
 
 ## 🚀 Próximos passos
-- Não tentar de novo em erros 4xx (só em timeout e 5xx)
-- Trocar `print` por `logging`
-- Orquestrar com Airflow
+- Estender o "sem retry" para os demais erros 4xx (hoje só o 404 é tratado)
+- Ao agendar diariamente no Airflow, rever se período vazio deve ser erro ou aviso (fins de semana)
 
 ## 👩‍💻 Autora
 Raissa — [LinkedIn](https://www.linkedin.com/in/raissamarusso/) · [GitHub](https://github.com/RaissaYrina)
