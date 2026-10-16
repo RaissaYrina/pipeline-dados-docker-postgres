@@ -23,6 +23,8 @@ def extract(data_inicial, data_final, url=URL_DADOS_DOLAR, tentativas=3):
     for tentativa in range(1, tentativas + 1):
         try:
             response = requests.get(url, params=params, timeout=10)
+            if response.status_code == 404:
+                return []
             response.raise_for_status()  # lança exceção se erro (4xx, 5xx)
             dados = response.json()      # já vira lista de dicionários!
             return dados
@@ -86,12 +88,12 @@ def load(linhas):
         #encerra a conexão com o banco de dados
         conn.close()
         print("Conexão Encerrada")
-    
-    
-    
+
 
 if __name__ == "__main__":
     dados = extract("01/01/2026","15/10/2026")
+    if not dados:
+        raise ValueError("Nenhum dado encontrado na API pro periodo selecionado.")
     linhas = transform(dados)
     load(linhas)
     print(f"{len(linhas)} linhas processadas")
