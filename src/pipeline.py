@@ -4,19 +4,37 @@ import psycopg2
 from dotenv import load_dotenv
 from datetime import datetime
 from decimal import Decimal
+import time
 
 load_dotenv()
 
-URL_DADOS_DOLAR = "https://api.bcb.gov.br/dados/serie/bcdata.sgs.1/dados/ultimos/20?formato=json"
+URL_DADOS_DOLAR = "https://api.bcb.gov.br/dados/serie/bcdata.sgs.1/dados"
 
-def extract():
+def extract(data_inicial, data_final, url=URL_DADOS_DOLAR, tentativas=3):
     """
     Busca o dado da API do Banco Central do Brasil sobre o valor do dólar.
     """
-    response = requests.get(URL_DADOS_DOLAR)
-    response.raise_for_status()  # lança exceção se erro (4xx, 5xx)
-    dados = response.json()      # já vira lista de dicionários!
-    return dados
+    params ={
+        "formato": "json",
+        "dataInicial": data_inicial,
+        "dataFinal": data_final
+    }
+    
+    for tentativa in range(1, tentativas + 1):
+        try:
+            response = requests.get(url, params=params, timeout=10)
+            response.raise_for_status()  # lança exceção se erro (4xx, 5xx)
+            dados = response.json()      # já vira lista de dicionários!
+            return dados
+        except requests.RequestException as e:
+            print(f"Erro de conexão na tentativa {tentativa}: {e}")
+            if tentativa < tentativas:
+                time.sleep(1)
+            else:
+                raise
+        except Exception as e:
+            print(f"Erro ao extrair dados da API: {e}")
+            raise
 
 def transform(registros):
     """
@@ -73,7 +91,7 @@ def load(linhas):
     
 
 if __name__ == "__main__":
-    dados = extract()
+    dados = extract("01/01/2026","15/10/2026")
     linhas = transform(dados)
     load(linhas)
     print(f"{len(linhas)} linhas processadas")
