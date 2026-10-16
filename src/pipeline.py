@@ -33,6 +33,7 @@ def transform(registros):
     
     
 def load(linhas):
+    #realiza a conexão no banco de dados do postgres
     conn = psycopg2.connect(
         host="localhost",
         port=5432,
@@ -41,18 +42,34 @@ def load(linhas):
         dbname=os.getenv("POSTGRES_DB"),
     )
     print("Conectado!")
+    cur = None
+    try: 
+        #cria um cursor para executar os comandos no banco de dados
+        cur = conn.cursor()       
+        #executa a criação da tabela se ela não existir
+        cur.execute("CREATE TABLE IF NOT EXISTS cotacao_dolar (data date PRIMARY KEY, valor numeric);")
+        # insere as linhas; datas já existentes são ignoradas (idempotente: pode rodar várias vezes)
+        cur.executemany(
+            "INSERT INTO cotacao_dolar (data, valor) VALUES (%s, %s) ON CONFLICT (data) DO NOTHING;",
+            linhas,
+        )
+        #commita as alterações no banco
+        conn.commit()        
+        print("Dados salvos no Banco!")    
+    except Exception as e:
+        print(f"Erro ao salvar no banco: {e}")
+        conn.rollback()
+        raise
 
-    cur = conn.cursor()      
-    cur.execute("CREATE TABLE IF NOT EXISTS cotacao_dolar (data date PRIMARY KEY, valor numeric);")
-    cur.executemany(
-        "INSERT INTO cotacao_dolar (data, valor) VALUES (%s, %s) ON CONFLICT (data) DO NOTHING;",
-        linhas,
-    )
-    conn.commit()            
-    cur.close()
-    conn.close()
+    finally:
+        #fecha o cursor
+        if cur: 
+            cur.close()
+        #encerra a conexão com o banco de dados
+        conn.close()
+        print("Conexão Encerrada")
     
-    print("Dados salvos no Banco!")
+    
     
 
 if __name__ == "__main__":
